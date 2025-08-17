@@ -79,12 +79,35 @@ async function applyWatermarkToPDF(
     .pdfjsLib as typeof import("pdfjs-dist/types/src/pdf");
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.mjs";
   
+  // Completely suppress PDF.js console output
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.warn = (...args: any[]) => {
+    const message = args.join(' ');
+    if (!message.includes('PDF') && !message.includes('pdf') && 
+        !message.includes('getHexString') && !message.includes('Unknown command') &&
+        !message.includes('FormatError') && !message.includes('beginImageData') &&
+        !message.includes('getOperatorList') && !message.includes('ensureStateFont')) {
+      originalWarn.apply(console, args);
+    }
+  };
+  console.error = (...args: any[]) => {
+    const message = args.join(' ');
+    if (!message.includes('PDF') && !message.includes('pdf') && 
+        !message.includes('Should not call beginImageData') &&
+        !message.includes('unreachable') && !message.includes('FormatError')) {
+      originalError.apply(console, args);
+    }
+  };
+  
   // Configure PDF.js to handle errors more gracefully
   pdfjs.GlobalWorkerOptions.verbosity = 0; // Reduce verbosity
   
   const fileUrl = URL.createObjectURL(file);
 
   let pdf;
+  let shouldUseFallback = false;
+  
   try {
     const loadingTask = pdfjs.getDocument({
       url: fileUrl,
@@ -102,18 +125,34 @@ async function applyWatermarkToPDF(
       isEvalSupported: false,
       maxImageSize: 16777216, // 16MB max image size
       password: "",
+      docBaseUrl: null,
+      cMapPacked: true,
+      withCredentials: false,
     });
     
     // Set a timeout for PDF loading
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("PDF loading timeout")), 10000);
+      setTimeout(() => reject(new Error("PDF loading timeout")), 5000); // Reduced timeout
     });
     
     pdf = await Promise.race([loadingTask.promise, timeoutPromise]);
+    
+    // Test if we can get basic info without errors
+    if (pdf.numPages <= 0) {
+      shouldUseFallback = true;
+    }
   } catch (loadError) {
-    console.error("Failed to load PDF:", loadError);
+    console.log("PDF loading failed, using fallback method");
+    shouldUseFallback = true;
+  }
+  
+  // Restore console functions
+  console.warn = originalWarn;
+  console.error = originalError;
+  
+  if (shouldUseFallback) {
     URL.revokeObjectURL(fileUrl);
-    throw new Error("Le PDF est corrompu ou invalide. Veuillez essayer avec un autre fichier PDF.");
+    return createFallbackPDF(canvas, ctx, file, watermarkText);
   }
   const numPages = pdf.numPages;
 
@@ -124,13 +163,25 @@ async function applyWatermarkToPDF(
   let totalHeight = 0;
   const pageCanvases = [];
 
+  // Suppress console output during page rendering
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.warn = () => {}; // Completely suppress warnings during rendering
+  console.error = (...args: any[]) => {
+    const message = args.join(' ');
+    if (!message.includes('beginImageData') && !message.includes('unreachable') && 
+        !message.includes('PDF') && !message.includes('FormatError')) {
+      originalError.apply(console, args);
+    }
+  };
+
   // Render each page with enhanced error handling
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     try {
       // Add timeout for page loading
       const pageLoadPromise = pdf.getPage(pageNum);
       const pageTimeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Page ${pageNum} timeout`)), 5000);
+        setTimeout(() => reject(new Error(`Page ${pageNum} timeout`)), 2000); // Reduced timeout
       });
       
       const page = await Promise.race([pageLoadPromise, pageTimeoutPromise]);
@@ -157,7 +208,7 @@ async function applyWatermarkToPDF(
       // Attempt to render page with multiple fallback strategies
       let renderSucceeded = false;
       
-      // Strategy 1: Try normal rendering
+      // Strategy 1: Try normal rendering with immediate timeout
       try {
         const renderTask = page.render({ 
           canvasContext: pageCtx, 
@@ -170,13 +221,13 @@ async function applyWatermarkToPDF(
         });
         
         const renderTimeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(`Render timeout for page ${pageNum}`)), 3000);
+          setTimeout(() => reject(new Error(`Render timeout for page ${pageNum}`)), 1000); // Very short timeout
         });
         
         await Promise.race([renderTask.promise, renderTimeoutPromise]);
         renderSucceeded = true;
       } catch (renderError) {
-        console.warn(`Strategy 1 failed for page ${pageNum}:`, renderError);
+        // Silent fail, try next strategy
       }
       
       // Strategy 2: Try with minimal options if first strategy failed
@@ -187,17 +238,17 @@ async function applyWatermarkToPDF(
           
           const simpleRenderTask = page.render({ 
             canvasContext: pageCtx, 
-            viewport: page.getViewport({ scale: 1 }),
+            viewport: page.getViewport({ scale: 0.5 }), // Smaller scale
           });
           
           const simpleTimeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error(`Simple render timeout for page ${pageNum}`)), 2000);
+            setTimeout(() => reject(new Error(`Simple render timeout for page ${pageNum}`)), 500); // Very short timeout
           });
           
           await Promise.race([simpleRenderTask.promise, simpleTimeoutPromise]);
           renderSucceeded = true;
         } catch (simpleRenderError) {
-          console.warn(`Strategy 2 failed for page ${pageNum}:`, simpleRenderError);
+          // Silent fail, go to fallback
         }
       }
       
@@ -224,9 +275,7 @@ async function applyWatermarkToPDF(
       pageCanvases.push(pageCanvas);
       totalHeight += height;
     } catch (pageError) {
-      console.warn(`Page ${pageNum} completely failed:`, pageError);
-      
-      // Create a fallback page
+      // Create a fallback page silently
       const fallbackCanvas = document.createElement("canvas");
       const fallbackCtx = fallbackCanvas.getContext("2d");
       if (fallbackCtx) {
@@ -248,6 +297,10 @@ async function applyWatermarkToPDF(
       }
     }
   }
+
+  // Restore console functions
+  console.warn = originalWarn;
+  console.error = originalError;
 
   // Set the dimensions of the temporary canvas
   if (pageCanvases.length === 0) {
@@ -323,6 +376,49 @@ function addWatermark(
   }
 
   ctx.restore();
+}
+
+// Fallback function for completely corrupted PDFs
+function createFallbackPDF(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  file: File,
+  watermarkText: string
+) {
+  // Create a single page representing the corrupted PDF
+  const width = 595; // A4 width at 72 DPI
+  const height = 842; // A4 height at 72 DPI
+  
+  canvas.width = width;
+  canvas.height = height;
+  
+  // White background
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, width, height);
+  
+  // Draw file info
+  ctx.fillStyle = '#333';
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  
+  const fileName = file.name;
+  const fileSize = (file.size / 1024 / 1024).toFixed(2);
+  
+  ctx.fillText('Document PDF', width / 2, 100);
+  ctx.fillText(`Fichier: ${fileName}`, width / 2, 130);
+  ctx.fillText(`Taille: ${fileSize} MB`, width / 2, 160);
+  
+  ctx.fillStyle = '#666';
+  ctx.font = '14px sans-serif';
+  ctx.fillText('Le contenu du PDF ne peut pas être affiché', width / 2, 200);
+  ctx.fillText('en raison de problèmes de format ou de corruption.', width / 2, 220);
+  
+  ctx.fillStyle = '#999';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Ce document a été traité pour ajouter un filigrane.', width / 2, 260);
+  
+  // Add watermark
+  addWatermark(ctx, width, height, 0, watermarkText);
 }
 
 export { applyWatermarkToPDF, applyWatermarkToImage, addWatermark };
