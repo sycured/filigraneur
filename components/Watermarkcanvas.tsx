@@ -8,12 +8,17 @@ export async function applyWatermark(
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  if (file.type === "application/pdf") {
-    await applyWatermarkToPDF(canvas, ctx, file, watermarkText);
-  } else if (file.type.startsWith("image/")) {
-    await applyWatermarkToImage(canvas, ctx, file, watermarkText);
-  } else {
-    alert("Type de fichier non pris en charge");
+  try {
+    if (file.type === "application/pdf") {
+      await applyWatermarkToPDF(canvas, ctx, file, watermarkText);
+    } else if (file.type.startsWith("image/")) {
+      await applyWatermarkToImage(canvas, ctx, file, watermarkText);
+    } else {
+      alert("Type de fichier non pris en charge");
+    }
+  } catch (error) {
+    console.error("Erreur lors de l'application du filigrane:", error);
+    alert("Erreur lors du traitement du fichier. Veuillez réessayer avec un autre fichier.");
   }
 }
 
@@ -24,14 +29,27 @@ async function applyWatermarkToPDF(
   watermarkText: string
 ) {
   const scale = 1.5;
-  /* pour ma défense c'est la première fois de ma vie que je fais ça */
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const pdfjs = (window as any)
     .pdfjsLib as typeof import("pdfjs-dist/types/src/pdf");
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.mjs";
+  
+  // Configure PDF.js to handle errors more gracefully
+  pdfjs.GlobalWorkerOptions.verbosity = 0; // Reduce verbosity
+  
   const fileUrl = URL.createObjectURL(file);
 
-  const loadingTask = pdfjs.getDocument(fileUrl);
+  const loadingTask = pdfjs.getDocument({
+    url: fileUrl,
+    standardFontDataUrl: "/pdfjs/",
+    cMapUrl: "/pdfjs/",
+    cMapPacked: true,
+    enableXfa: false,
+    disableAutoFetch: true,
+    disableStream: true,
+    disableRange: true,
+    stopAtErrors: false,
+  });
   const pdf = await loadingTask.promise;
   const numPages = pdf.numPages;
 
@@ -44,30 +62,49 @@ async function applyWatermarkToPDF(
 
   // Render each page
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale });
+    try {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale });
 
-    const pageCanvas = document.createElement("canvas");
-    const pageCtx = pageCanvas.getContext("2d");
-    if (!pageCtx) {
-      throw new Error("Impossible de créer le contexte du canvas de page");
+      const pageCanvas = document.createElement("canvas");
+      const pageCtx = pageCanvas.getContext("2d");
+      if (!pageCtx) {
+        console.warn(`Impossible de créer le contexte pour la page ${pageNum}`);
+        continue;
+      }
+      pageCanvas.width = viewport.width;
+      pageCanvas.height = viewport.height;
+
+      // Render with error handling
+      try {
+        await page.render({ 
+          canvasContext: pageCtx, 
+          viewport,
+          background: 'white',
+          intent: 'display'
+        }).promise;
+      } catch (renderError) {
+        console.warn(`Erreur lors du rendu de la page ${pageNum}:`, renderError);
+        // Fill with white background if rendering fails
+        pageCtx.fillStyle = 'white';
+        pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      }
+
+      // Add watermark to the page
+      addWatermark(
+        pageCtx,
+        pageCanvas.width,
+        pageCanvas.height,
+        0,
+        watermarkText
+      );
+
+      pageCanvases.push(pageCanvas);
+      totalHeight += pageCanvas.height;
+    } catch (pageError) {
+      console.warn(`Erreur lors du traitement de la page ${pageNum}:`, pageError);
+      // Continue with next page
     }
-    pageCanvas.width = viewport.width;
-    pageCanvas.height = viewport.height;
-
-    await page.render({ canvasContext: pageCtx, viewport }).promise;
-
-    // Add watermark to the page
-    addWatermark(
-      pageCtx,
-      pageCanvas.width,
-      pageCanvas.height,
-      0,
-      watermarkText
-    );
-
-    pageCanvases.push(pageCanvas);
-    totalHeight += pageCanvas.height;
   }
 
   // Set the dimensions of the temporary canvas
@@ -126,7 +163,7 @@ function addWatermark(
   if (watermarkText === "") return;
   ctx.save();
 
-  ctx.font = "28px 'Merriweather'";
+  ctx.font = "28px 'JetBrains Mono', monospace";
   ctx.fillStyle = "rgba(200, 0, 0, 0.7)";
 
   ctx.translate(width / 2, height / 2 + yOffset);
