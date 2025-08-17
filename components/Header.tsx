@@ -14,18 +14,18 @@ export default async function Header() {
       </div>
       <h2 className="text-lg sm:text-lg  text-gray-600 text-center items-center justify-center gap-[5px]  leading-tight">
         <span className="block sm:inline">
-          Version{" "}
+          Outil{" "}
           <a
             href="https://github.com/cyberclarence/filigraneur"
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:underline underline"
           >
-            Opensource
+            open source
           </a>{" "}
-          et <span className="text-red-500">Sécurisée</span>{" "}
+          et <span className="text-green-600">gratuit</span>{" "}
         </span>
-        <span className="block sm:inline">du site du gouvernement</span>
+        <span className="block sm:inline">pour ajouter des filigranes</span>
       </h2>
     </div>
   );

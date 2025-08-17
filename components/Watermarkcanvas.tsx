@@ -49,6 +49,9 @@ async function applyWatermarkToPDF(
 
     const pageCanvas = document.createElement("canvas");
     const pageCtx = pageCanvas.getContext("2d");
+    if (!pageCtx) {
+      throw new Error("Impossible de créer le contexte du canvas de page");
+    }
     pageCanvas.width = viewport.width;
     pageCanvas.height = viewport.height;
 
@@ -68,10 +71,16 @@ async function applyWatermarkToPDF(
   }
 
   // Set the dimensions of the temporary canvas
+  if (pageCanvases.length === 0) {
+    throw new Error("Aucune page n'a pu être rendue");
+  }
   tempCanvas.width = pageCanvases[0].width;
   tempCanvas.height = totalHeight;
 
   // Draw all pages on the temporary canvas
+  if (!tempCtx) {
+    throw new Error("Impossible de créer le contexte du canvas temporaire");
+  }
   let yOffset = 0;
   for (const pageCanvas of pageCanvases) {
     tempCtx.drawImage(pageCanvas, 0, yOffset);
