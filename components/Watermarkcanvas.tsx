@@ -15,7 +15,7 @@ async function validatePDF(file: File): Promise<boolean> {
       
       // Check PDF header
       const header = uint8Array.slice(0, 5);
-      const headerString = String.fromCharCode(...header);
+      const headerString = Array.from(header).map(b => String.fromCharCode(b)).join('');
       
       // Check if it starts with %PDF-
       if (!headerString.startsWith('%PDF-')) {
@@ -24,7 +24,8 @@ async function validatePDF(file: File): Promise<boolean> {
       }
       
       // Check for basic PDF structure
-      const fileString = String.fromCharCode(...uint8Array.slice(0, Math.min(1024, uint8Array.length)));
+      const chunk = uint8Array.slice(0, Math.min(1024, uint8Array.length));
+      const fileString = Array.from(chunk).map(b => String.fromCharCode(b)).join('');
       
       // Look for some basic PDF elements
       const hasBasicStructure = 
@@ -100,9 +101,6 @@ async function applyWatermarkToPDF(
     }
   };
   
-  // Configure PDF.js to handle errors more gracefully
-  pdfjs.GlobalWorkerOptions.verbosity = 0; // Reduce verbosity
-  
   const fileUrl = URL.createObjectURL(file);
 
   let pdf;
@@ -119,14 +117,12 @@ async function applyWatermarkToPDF(
       disableStream: true,
       disableRange: true,
       stopAtErrors: false,
-      ignoreErrors: true,
       fontExtraProperties: true,
       useSystemFonts: false,
       isEvalSupported: false,
       maxImageSize: 16777216, // 16MB max image size
       password: "",
       docBaseUrl: null,
-      cMapPacked: true,
       withCredentials: false,
     });
     
@@ -164,14 +160,14 @@ async function applyWatermarkToPDF(
   const pageCanvases = [];
 
   // Suppress console output during page rendering
-  const originalWarn = console.warn;
-  const originalError = console.error;
+  const renderOriginalWarn = console.warn;
+  const renderOriginalError = console.error;
   console.warn = () => {}; // Completely suppress warnings during rendering
   console.error = (...args: any[]) => {
     const message = args.join(' ');
     if (!message.includes('beginImageData') && !message.includes('unreachable') && 
         !message.includes('PDF') && !message.includes('FormatError')) {
-      originalError.apply(console, args);
+      renderOriginalError.apply(console, args);
     }
   };
 
