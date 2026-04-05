@@ -30,3 +30,30 @@ Contactez moi si vous voulez aider: clarence@filigraneur.fr
 ## Licence
 
 Le projet est sous licence AGPL
+
+## Déploiement
+### Local
+
+```bash
+# Installer les dépendances
+bun install
+
+# Lancer le serveur de développement
+bun run dev
+
+# Build de production
+bun run build
+
+# Lancer en production
+bun run start
+```
+
+### Docker
+
+```bash
+# Build de l'image
+docker build -t filigraneur .
+
+# Lancer le conteneur
+docker run --rm -d -p 3000:3000 filigraneur
+```
