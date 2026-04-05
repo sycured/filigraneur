@@ -15,13 +15,13 @@ export default function Preview({
       {preview && (
         <button
           onClick={onDownload}
-          className="bg-green-500 text-white rounded px-4 py-2"
+          className="bg-green-500 hover:bg-green-600 text-white rounded px-4 py-2 transition-colors"
         >
           Télécharger
         </button>
       )}
 
-      <div className="h-full overflow-auto border rounded-lg w-full">
+      <div className="h-full overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg w-full bg-white dark:bg-gray-800">
         {preview ? (
           <img
             src={preview}
@@ -33,7 +33,7 @@ export default function Preview({
             className="flex items-center justify-center h-full w-full"
             onClick={onSelectDocumentClick}
           >
-            <p className="text-gray-500">Selectionnez un document</p>
+            <p className="text-gray-500 dark:text-gray-400">Selectionnez un document</p>
           </div>
         )}
       </div>

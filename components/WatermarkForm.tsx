@@ -19,12 +19,12 @@ export default function WatermarkForm({
         type="text"
         value={watermarkText}
         onChange={(e) => onWatermarkChange(e.target.value)}
-        className="w-full px-3 py-2  border rounded"
+        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
         placeholder="Entrez le texte du filigrane (ex: usage exclusif site.com)"
       />
       <button
         onClick={onApplyWatermark}
-        className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
       >
         Appliquer le filigrane
       </button>

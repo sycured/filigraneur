@@ -45,7 +45,7 @@ export default function CoreProduct({ header, footer }: CoreProductProps) {
   };
 
   return (
-    <div className="flex flex-col items-center  h-full w-full p-4 bg-white text-gray-800 mx-auto overflow-auto">
+    <div className="flex flex-col items-center h-full w-full p-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 mx-auto overflow-auto">
       {header}
       <div className="flex flex-col w-full items-center justify-start h-full overflow-auto">
         <div className="w-full max-w-md items-center justify-start overflow-auto h-full flex flex-col gap-2">
@@ -59,7 +59,7 @@ export default function CoreProduct({ header, footer }: CoreProductProps) {
               }
             }}
             ref={fileInputRef}
-            className="border border-gray-300 rounded p-2 w-full"
+            className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
           />
           <WatermarkForm
             watermarkText={watermarkText}
